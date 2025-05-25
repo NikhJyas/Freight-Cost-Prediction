@@ -1,0 +1,86 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from lightgbm import LGBMRegressor
+from xgboost import XGBRegressor
+from sklearn.ensemble import RandomForestRegressor
+import matplotlib.pyplot as plt
+
+# Simulated dataset (replace with real data, e.g., from Kaggle)
+np.random.seed(42)
+data = {
+    'Weight': np.random.uniform(10, 1000, 1000),
+    'Distance': np.random.uniform(50, 5000, 1000),
+    'Transport_Mode': np.random.choice(['Air', 'Sea', 'Road', 'Rail'], 1000),
+    'Fuel_Surcharge': np.random.uniform(0.05, 0.3, 1000),
+    'Delivery_Urgency': np.random.choice(['Standard', 'Express'], 1000),
+    'Origin_City': np.random.choice(['New York', 'London', 'Shanghai', 'Mumbai'], 1000),
+    'Destination_City': np.random.choice(['Tokyo', 'Paris', 'Dubai', 'Sydney'], 1000),
+}
+data['Shipping_Cost'] = (
+    data['Weight'] * 0.5 +
+    data['Distance'] * 0.1 +
+    data['Fuel_Surcharge'] * 1000 +
+    np.where(data['Delivery_Urgency'] == 'Express', 200, 50) +
+    np.random.normal(0, 50, 1000)
+)
+df = pd.DataFrame(data)
+
+# Define features and target
+X = df.drop('Shipping_Cost', axis=1)
+y = df['Shipping_Cost']
+
+# Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Preprocessing
+numeric_features = ['Weight', 'Distance', 'Fuel_Surcharge']
+categorical_features = ['Transport_Mode', 'Delivery_Urgency', 'Origin_City', 'Destination_City']
+preprocessor = ColumnTransformer(
+    transformers=[
+        ('num', StandardScaler(), numeric_features),
+        ('cat', OneHotEncoder(drop='first', handle_unknown='ignore'), categorical_features)
+    ])
+
+# Models
+models = {
+    'Random Forest': RandomForestRegressor(random_state=42),
+    'XGBoost': XGBRegressor(random_state=42),
+    'LightGBM': LGBMRegressor(random_state=42)
+}
+
+# Train and evaluate
+results = {}
+for name, model in models.items():
+    pipeline = Pipeline(steps=[('preprocessor', preprocessor), ('model', model)])
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    mae = mean_absolute_error(y_test, y_pred)
+    mse = mean_squared_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    results[name] = {'MAE': mae, 'MSE': mse, 'R²': r2}
+
+# Print results
+for name, metrics in results.items():
+    print(f"{name} Performance:")
+    print(f"MAE: {metrics['MAE']:.2f}")
+    print(f"MSE: {metrics['MSE']:.2f}")
+    print(f"R²: {metrics['R²']:.2f}")
+    print()
+
+# Visualize predictions (using LightGBM as example)
+best_model = Pipeline(steps=[('preprocessor', preprocessor), ('model', LGBMRegressor(random_state=42))])
+best_model.fit(X_train, y_train)
+y_pred = best_model.predict(X_test)
+plt.figure(figsize=(10, 6))
+plt.scatter(y_test, y_pred, color='blue', alpha=0.5)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], 'r--', lw=2)
+plt.xlabel('Actual Shipping Cost ($)')
+plt.ylabel('Predicted Shipping Cost ($)')
+plt.title('Actual vs Predicted Shipping Costs (LightGBM)')
+plt.tight_layout()
+plt.savefig('shipping_cost_predictions.png')
